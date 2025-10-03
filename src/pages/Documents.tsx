@@ -3,44 +3,122 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import DocumentUpload from "@/components/documents/DocumentUpload";
-import DocumentList from "@/components/documents/DocumentList";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Upload, FolderOpen, BarChart3 } from "lucide-react";
-import { Document, DocumentType } from "@/types/document";
-import { MockDocumentService as DocumentService } from "@/services/mockDocumentService";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { 
+  FileText, 
+  Upload, 
+  Users, 
+  Search,
+  Plus,
+  Eye,
+  Download,
+  Trash2,
+  MoreHorizontal,
+  CheckCircle,
+  AlertCircle,
+  Clock
+} from "lucide-react";
+import { Document, DocumentType, Beneficiary } from "@/types/document";
+import { DocumentService } from "@/services/documentService";
+import DocumentUpload from "@/components/documents/DocumentUpload";
 import { toast } from "sonner";
+
+// Define the required document types exactly as specified
+const REQUIRED_DOCUMENTS = [
+  { type: DocumentType.DISABILITY_CERTIFICATE, label: 'Disability Certificate', icon: '🏥' },
+  { type: DocumentType.IDENTITY_PROOF, label: 'Identity Proof (Aadhaar Card)', icon: '🆔' },
+  { type: DocumentType.PASSPORT_PHOTO, label: 'Passport-sized Photo', icon: '📸' },
+  { type: DocumentType.BIRTH_CERTIFICATE, label: 'Birth Certificate', icon: '📜' },
+  { type: DocumentType.MEDICAL_REPORT, label: 'Medical Reports', icon: '🩺' },
+  { type: DocumentType.INCOME_CERTIFICATE, label: 'Income Certificate', icon: '💰' },
+  { type: DocumentType.CASTE_CERTIFICATE, label: 'Caste Certificate', icon: '📋' }
+] as const;
+
+interface StudentWithDocuments extends Beneficiary {
+  documents: Document[];
+  completedDocuments: number;
+  totalRequired: number;
+  completionPercentage: number;
+}
 
 const Documents = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [documentsLoading, setDocumentsLoading] = useState(false);
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    byType: {} as Record<DocumentType, number>
-  });
+  const [students, setStudents] = useState<StudentWithDocuments[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState<StudentWithDocuments | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<DocumentType | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
 
-  const loadDocuments = async (userId: string) => {
-    setDocumentsLoading(true);
+  const loadStudentsWithDocuments = async () => {
     try {
-      const [userDocuments, documentStats] = await Promise.all([
-        DocumentService.getUserDocuments(userId),
-        DocumentService.getDocumentStats(userId)
-      ]);
-      setDocuments(userDocuments);
-      setStats(documentStats);
+      // Fetch all beneficiaries
+      const { data: beneficiaries, error: beneficiariesError } = await supabase
+        .from('beneficiaries')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (beneficiariesError) {
+        throw new Error(`Failed to fetch beneficiaries: ${beneficiariesError.message}`);
+      }
+
+      if (!beneficiaries || beneficiaries.length === 0) {
+        setStudents([]);
+        return;
+      }
+
+      // Fetch documents for all beneficiaries
+      const studentsWithDocuments: StudentWithDocuments[] = await Promise.all(
+        beneficiaries.map(async (beneficiary) => {
+          try {
+            const documents = await DocumentService.getBeneficiaryDocuments(beneficiary.id);
+            const completedDocuments = new Set(documents.map(doc => doc.type)).size;
+            const totalRequired = REQUIRED_DOCUMENTS.length;
+            const completionPercentage = Math.round((completedDocuments / totalRequired) * 100);
+
+            return {
+              ...beneficiary,
+              documents,
+              completedDocuments,
+              totalRequired,
+              completionPercentage
+            };
+          } catch (error) {
+            console.error(`Failed to load documents for ${beneficiary.name}:`, error);
+            return {
+              ...beneficiary,
+              documents: [],
+              completedDocuments: 0,
+              totalRequired: REQUIRED_DOCUMENTS.length,
+              completionPercentage: 0
+            };
+          }
+        })
+      );
+
+      setStudents(studentsWithDocuments);
     } catch (error) {
-      console.error('Failed to load documents:', error);
-      toast.error('Failed to load documents');
-    } finally {
-      setDocumentsLoading(false);
+      console.error('Failed to load students and documents:', error);
+      toast.error('Failed to load students and documents');
     }
   };
 
@@ -55,14 +133,7 @@ const Documents = () => {
       
       setUser(session.user);
       setLoading(false);
-      
-      // Load documents after authentication
-      // Seed sample data for demo if no documents exist
-      const existingDocs = await DocumentService.getUserDocuments(session.user.id);
-      if (existingDocs.length === 0) {
-        DocumentService.seedSampleData(session.user.id);
-      }
-      await loadDocuments(session.user.id);
+      await loadStudentsWithDocuments();
     };
 
     checkAuth();
@@ -72,7 +143,7 @@ const Documents = () => {
         navigate("/auth");
       } else {
         setUser(session.user);
-        await loadDocuments(session.user.id);
+        await loadStudentsWithDocuments();
       }
     });
 
@@ -80,27 +151,31 @@ const Documents = () => {
   }, [navigate]);
 
   const handleUpload = async (file: File, documentType: DocumentType) => {
-    if (!user) return;
+    if (!user || !selectedStudent) return;
     
     try {
-      await DocumentService.uploadDocument(file, documentType, user.id);
-      await loadDocuments(user.id);
-      toast.success('Document uploaded successfully!');
+      await DocumentService.uploadDocument(file, documentType, user.id, selectedStudent.id);
+      await loadStudentsWithDocuments();
+      toast.success(`Document uploaded successfully for ${selectedStudent.name}!`);
+      setUploadDialogOpen(false);
+      setSelectedDocumentType(null);
     } catch (error) {
       console.error('Upload failed:', error);
-      throw error; // Re-throw to let the upload component handle it
+      toast.error('Failed to upload document');
+      throw error;
     }
   };
 
-  const handleDelete = async (documentId: string) => {
-    if (!user) return;
-    
-    try {
-      await DocumentService.deleteDocument(documentId);
-      await loadDocuments(user.id);
-    } catch (error) {
-      console.error('Delete failed:', error);
-      throw error;
+  const handleDocumentAction = (student: StudentWithDocuments, docType: DocumentType, action: 'add' | 'view') => {
+    setSelectedStudent(student);
+    if (action === 'add') {
+      setSelectedDocumentType(docType);
+      setUploadDialogOpen(true);
+    } else {
+      const document = student.documents.find(doc => doc.type === docType);
+      if (document) {
+        setPreviewDocument(document);
+      }
     }
   };
 
@@ -115,9 +190,10 @@ const Documents = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      toast.success('Download started');
     } catch (error) {
       console.error('Download failed:', error);
-      throw error;
+      toast.error('Failed to download document');
     }
   };
 
@@ -125,6 +201,40 @@ const Documents = () => {
     const url = DocumentService.getDocumentUrl(document.file_path);
     window.open(url, '_blank');
   };
+
+  const handleDelete = async (document: Document) => {
+    try {
+      await DocumentService.deleteDocument(document.id);
+      await loadStudentsWithDocuments();
+      toast.success('Document deleted successfully');
+    } catch (error) {
+      console.error('Delete failed:', error);
+      toast.error('Failed to delete document');
+    }
+  };
+
+  const calculateAge = (dob: string) => {
+    const today = new Date();
+    const birthDate = new Date(dob);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const getStatusColor = (hasDocument: boolean) => {
+    return hasDocument 
+      ? 'bg-green-50 border-green-200 text-green-700'
+      : 'bg-red-50 border-red-200 text-red-700';
+  };
+
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.guardian_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.city.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -138,214 +248,221 @@ const Documents = () => {
     <DashboardLayout user={user}>
       <div className="space-y-6">
         <div>
-          <h1 className="text-4xl font-bold text-foreground">General Documents</h1>
+          <h1 className="text-4xl font-bold text-foreground">Student Documents</h1>
           <p className="text-muted-foreground mt-2 text-lg">
-            Upload and manage general NGO documents (not student-specific)
+            Manage documents for each student - upload, view, and track completion status
           </p>
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              💡 <strong>Tip:</strong> For student-specific documents, use the "Student Documents" section instead.
-            </p>
+        </div>
+        {/* Search Bar */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Search Students
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by student name, guardian, or city..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Students List */}
+        {filteredStudents.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
+              <p className="text-lg font-medium mb-2">
+                {students.length === 0 ? "No students found" : "No students match your search"}
+              </p>
+              <p className="text-muted-foreground">
+                {students.length === 0 
+                  ? "Add students in the Beneficiaries section first"
+                  : "Try adjusting your search criteria"
+                }
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {filteredStudents.map((student) => (
+              <Card key={student.id} className="overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white font-bold text-lg">
+                        {student.name.charAt(0)}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold">{student.name}</h3>
+                        <p className="text-muted-foreground">
+                          {calculateAge(student.date_of_birth)} years • {student.disability_type} • {student.city}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Guardian: {student.guardian_name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium">Completion</span>
+                        <Badge variant={student.completionPercentage === 100 ? 'default' : 'secondary'}>
+                          {student.completionPercentage}%
+                        </Badge>
+                      </div>
+                      <div className="w-32 bg-muted rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${
+                            student.completionPercentage === 100 ? 'bg-green-500' :
+                            student.completionPercentage > 0 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${student.completionPercentage}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {student.completedDocuments} / {student.totalRequired} documents
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {REQUIRED_DOCUMENTS.map((reqDoc) => {
+                      const existingDocument = student.documents.find(doc => doc.type === reqDoc.type);
+                      const hasDocument = !!existingDocument;
+                      
+                      return (
+                        <div 
+                          key={reqDoc.type}
+                          className={`p-3 border rounded-lg transition-all ${getStatusColor(hasDocument)}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{reqDoc.icon}</span>
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{reqDoc.label}</p>
+                                {hasDocument && existingDocument && (
+                                  <p className="text-xs opacity-70 truncate">
+                                    {existingDocument.name}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-1">
+                              {hasDocument && existingDocument ? (
+                                <>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="sm">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handlePreview(existingDocument)}>
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Preview
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleDownload(existingDocument)}>
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Download
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => handleDelete(existingDocument)}
+                                        className="text-destructive"
+                                      >
+                                        <Trash2 className="w-4 h-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleDocumentAction(student, reqDoc.type, 'add')}
+                                  className="text-xs px-2 py-1 h-7"
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  Add
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
+        )}
 
-        {/* Document Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <FileText className="h-8 w-8 text-muted-foreground" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
-                  <div className="flex items-center">
-                    <div className="text-2xl font-bold">{stats.total}</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <BarChart3 className="h-8 w-8 text-yellow-500" />
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                  <div className="flex items-center">
-                    <div className="text-2xl font-bold">{stats.pending}</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-bold">✓</div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">Approved</p>
-                  <div className="flex items-center">
-                    <div className="text-2xl font-bold">{stats.approved}</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="h-8 w-8 rounded-full bg-red-500 flex items-center justify-center text-white text-sm font-bold">✗</div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">Rejected</p>
-                  <div className="flex items-center">
-                    <div className="text-2xl font-bold">{stats.rejected}</div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content */}
-        <Tabs defaultValue="upload" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upload" className="flex items-center gap-2">
-              <Upload className="w-4 h-4" />
-              Upload Documents
-            </TabsTrigger>
-            <TabsTrigger value="manage" className="flex items-center gap-2">
-              <FolderOpen className="w-4 h-4" />
-              My Documents
-              {stats.total > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {stats.total}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="required" className="flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Required Documents
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="upload" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="w-5 h-5" />
-                  Upload New Document
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DocumentUpload onUpload={handleUpload} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="manage" className="space-y-6">
-            <DocumentList
-              documents={documents}
-              onDelete={handleDelete}
-              onDownload={handleDownload}
-              onPreview={handlePreview}
-              loading={documentsLoading}
-            />
-          </TabsContent>
-
-          <TabsContent value="required" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Required Documents for NGO Beneficiaries
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p className="text-muted-foreground mb-6">
-                  Please ensure you have all the following documents to complete your registration as a beneficiary:
+        {/* Upload Dialog */}
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Upload {selectedDocumentType && REQUIRED_DOCUMENTS.find(d => d.type === selectedDocumentType)?.label}
+              </DialogTitle>
+              {selectedStudent && (
+                <p className="text-sm text-muted-foreground">
+                  For student: {selectedStudent.name}
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">🏥</span>
-                      <div>
-                        <h3 className="font-semibold">Disability Certificate</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Official disability certificate from government authority (UDID or equivalent)
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">🆔</span>
-                      <div>
-                        <h3 className="font-semibold">Identity Proof</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Aadhaar card or other valid government-issued ID proof
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">📸</span>
-                      <div>
-                        <h3 className="font-semibold">Passport-sized Photo</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Recent passport-sized photograph (white background preferred)
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">📜</span>
-                      <div>
-                        <h3 className="font-semibold">Birth Certificate</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Official birth certificate issued by municipal authority
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">🩺</span>
-                      <div>
-                        <h3 className="font-semibold">Medical Reports</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Medical reports and assessments related to the disability condition
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">💰</span>
-                      <div>
-                        <h3 className="font-semibold">Income Certificate</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Income certificate from competent authority (for financial assistance)
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-4 border rounded-lg">
-                      <span className="text-2xl">📋</span>
-                      <div>
-                        <h3 className="font-semibold">Caste Certificate</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Caste certificate (if applicable for reservation benefits)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+              )}
+            </DialogHeader>
+            {selectedDocumentType && (
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    📄 You are uploading: <strong>{REQUIRED_DOCUMENTS.find(d => d.type === selectedDocumentType)?.label}</strong>
+                  </p>
                 </div>
-                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-semibold text-blue-900 mb-2">📋 Important Notes:</h4>
-                  <ul className="text-sm text-blue-800 space-y-1">
-                    <li>• All documents should be clear and legible</li>
-                    <li>• Accepted formats: PDF, JPG, JPEG, PNG, DOC, DOCX</li>
-                    <li>• Maximum file size: 10MB per document</li>
-                    <li>• Original documents may be required for verification</li>
-                    <li>• Documents will be reviewed within 3-5 business days</li>
-                  </ul>
+                <DocumentUpload onUpload={handleUpload} />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={!!previewDocument} onOpenChange={() => setPreviewDocument(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle>Document Preview</DialogTitle>
+              {previewDocument && (
+                <p className="text-sm text-muted-foreground">
+                  {previewDocument.name}
+                </p>
+              )}
+            </DialogHeader>
+            {previewDocument && (
+              <div className="space-y-4">
+                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
+                  <p className="text-muted-foreground">Document preview will appear here</p>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                <div className="flex gap-2">
+                  <Button onClick={() => handlePreview(previewDocument)}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Open in New Tab
+                  </Button>
+                  <Button variant="outline" onClick={() => handleDownload(previewDocument)}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

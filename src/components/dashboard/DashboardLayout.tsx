@@ -27,7 +27,6 @@ const menuItems = [
   { title: "Beneficiaries", url: "/beneficiaries", icon: Users },
   { title: "Attendance", url: "/attendance", icon: Calendar },
   { title: "Documents", url: "/documents", icon: FileText },
-  { title: "Student Documents", url: "/student-documents", icon: FolderOpen },
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 
