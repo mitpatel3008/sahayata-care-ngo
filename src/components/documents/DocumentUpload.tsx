@@ -12,14 +12,16 @@ interface DocumentUploadProps {
   onUpload: (file: File, documentType: DocumentType) => Promise<void>;
   acceptedFileTypes?: string[];
   maxFileSize?: number; // in MB
+  preSelectedType?: DocumentType; // Pre-selected document type
 }
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ 
   onUpload, 
   acceptedFileTypes = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'],
-  maxFileSize = 10
+  maxFileSize = 10,
+  preSelectedType
 }) => {
-  const [selectedDocumentType, setSelectedDocumentType] = useState<DocumentType | ''>('');
+  const [selectedDocumentType, setSelectedDocumentType] = useState<DocumentType | ''>(preSelectedType || '');
   const [uploadProgress, setUploadProgress] = useState<DocumentUploadProgress[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,26 +128,28 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="text-sm font-medium">Document Type</label>
-        <Select value={selectedDocumentType} onValueChange={setSelectedDocumentType}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select document type" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(DocumentTypeLabels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>
-                <div className="flex flex-col">
-                  <span>{label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {DocumentTypeDescriptions[key as DocumentType]}
-                  </span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!preSelectedType && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Document Type</label>
+          <Select value={selectedDocumentType} onValueChange={setSelectedDocumentType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select document type" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(DocumentTypeLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  <div className="flex flex-col">
+                    <span>{label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {DocumentTypeDescriptions[key as DocumentType]}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <Card 
         className={`border-2 border-dashed transition-colors ${

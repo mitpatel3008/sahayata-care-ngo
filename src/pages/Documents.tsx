@@ -427,7 +427,10 @@ const Documents = () => {
                     📄 You are uploading: <strong>{REQUIRED_DOCUMENTS.find(d => d.type === selectedDocumentType)?.label}</strong>
                   </p>
                 </div>
-                <DocumentUpload onUpload={handleUpload} />
+                <DocumentUpload 
+                  onUpload={handleUpload} 
+                  preSelectedType={selectedDocumentType}
+                />
               </div>
             )}
           </DialogContent>
