@@ -141,8 +141,15 @@ export class MockDocumentService {
     });
   }
 
-  // Utility method to seed some sample data for demo
-  static seedSampleData(userId: string): void {
+  // Utility method to seed some sample data for demo with student context
+  static seedSampleData(userId: string, studentId?: string): void {
+    const existingDocs = this.getStoredDocuments();
+    
+    // Only seed if no documents exist yet
+    if (existingDocs.length > 0) {
+      return;
+    }
+
     const sampleDocuments: Document[] = [
       {
         id: 'doc_sample_1',
@@ -152,6 +159,7 @@ export class MockDocumentService {
         file_size: 245760,
         uploaded_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
         uploaded_by: userId,
+        beneficiary_id: studentId,
         status: 'approved',
       },
       {
@@ -162,6 +170,7 @@ export class MockDocumentService {
         file_size: 156480,
         uploaded_at: new Date(Date.now() - 43200000).toISOString(), // 12 hours ago
         uploaded_by: userId,
+        beneficiary_id: studentId,
         status: 'pending',
       },
       {
@@ -172,10 +181,17 @@ export class MockDocumentService {
         file_size: 89234,
         uploaded_at: new Date(Date.now() - 21600000).toISOString(), // 6 hours ago
         uploaded_by: userId,
+        beneficiary_id: studentId,
         status: 'approved',
       }
     ];
 
     this.saveDocuments(sampleDocuments);
+  }
+
+  // Get all documents (for student selector to calculate completion status)
+  static async getAllDocuments(): Promise<Document[]> {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return this.getStoredDocuments();
   }
 }

@@ -93,6 +93,96 @@ export class DocumentService {
   }
 
   /**
+   * Get all beneficiaries with their document counts
+   */
+  static async getBeneficiariesWithDocumentCounts(): Promise<Array<{
+    id: string;
+    name: string;
+    date_of_birth: string;
+    gender: string;
+    disability_type: string;
+    guardian_name: string;
+    city: string;
+    state: string;
+    document_count: number;
+    completed_documents: number;
+    total_required: number;
+  }>> {
+    // First get all beneficiaries
+    const { data: beneficiaries, error: beneficiariesError } = await supabase
+      .from('beneficiaries')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (beneficiariesError) {
+      throw new Error(`Failed to fetch beneficiaries: ${beneficiariesError.message}`);
+    }
+
+    // Then get document counts for each beneficiary
+    const beneficiariesWithCounts = await Promise.all(
+      (beneficiaries || []).map(async (beneficiary) => {
+        const { data: documents } = await supabase
+          .from('documents')
+          .select('type')
+          .eq('beneficiary_id', beneficiary.id);
+
+        const documentCount = documents?.length || 0;
+        const totalRequired = Object.keys(DocumentType).length;
+        const completedDocuments = new Set(documents?.map(doc => doc.type) || []).size;
+
+        return {
+          id: beneficiary.id,
+          name: beneficiary.name,
+          date_of_birth: beneficiary.date_of_birth,
+          gender: beneficiary.gender,
+          disability_type: beneficiary.disability_type,
+          guardian_name: beneficiary.guardian_name,
+          city: beneficiary.city,
+          state: beneficiary.state,
+          document_count: documentCount,
+          completed_documents: completedDocuments,
+          total_required: totalRequired
+        };
+      })
+    );
+
+    return beneficiariesWithCounts;
+  }
+
+  /**
+   * Get document statistics for a specific beneficiary
+   */
+  static async getBeneficiaryDocumentStats(beneficiaryId: string): Promise<{
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    byType: Record<DocumentType, number>;
+    missingTypes: DocumentType[];
+  }> {
+    const documents = await this.getBeneficiaryDocuments(beneficiaryId);
+    
+    const stats = {
+      total: documents.length,
+      pending: documents.filter(doc => doc.status === 'pending').length,
+      approved: documents.filter(doc => doc.status === 'approved').length,
+      rejected: documents.filter(doc => doc.status === 'rejected').length,
+      byType: {} as Record<DocumentType, number>,
+      missingTypes: [] as DocumentType[]
+    };
+
+    // Count by type
+    Object.values(DocumentType).forEach(type => {
+      stats.byType[type] = documents.filter(doc => doc.type === type).length;
+      if (stats.byType[type] === 0) {
+        stats.missingTypes.push(type);
+      }
+    });
+
+    return stats;
+  }
+
+  /**
    * Download a document
    */
   static async downloadDocument(document: Document): Promise<Blob> {

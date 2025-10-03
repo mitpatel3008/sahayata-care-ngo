@@ -9,7 +9,8 @@ import {
   BarChart3, 
   LogOut,
   Heart,
-  Menu
+  Menu,
+  FolderOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +27,7 @@ const menuItems = [
   { title: "Beneficiaries", url: "/beneficiaries", icon: Users },
   { title: "Attendance", url: "/attendance", icon: Calendar },
   { title: "Documents", url: "/documents", icon: FileText },
+  { title: "Student Documents", url: "/student-documents", icon: FolderOpen },
   { title: "Reports", url: "/reports", icon: BarChart3 },
 ];
 

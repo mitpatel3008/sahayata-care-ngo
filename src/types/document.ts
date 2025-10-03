@@ -11,6 +11,32 @@ export interface Document {
   notes?: string;
 }
 
+export interface BeneficiaryDocument extends Document {
+  beneficiary_id: string; // Required for beneficiary documents
+}
+
+export interface Beneficiary {
+  id: string;
+  name: string;
+  date_of_birth: string;
+  gender: string;
+  disability_type: string;
+  disability_percentage?: number;
+  guardian_name: string;
+  guardian_phone: string;
+  guardian_email?: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  aadhaar_number?: string;
+  udid_number?: string;
+  notes?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export enum DocumentType {
   DISABILITY_CERTIFICATE = 'disability_certificate',
   IDENTITY_PROOF = 'identity_proof',
