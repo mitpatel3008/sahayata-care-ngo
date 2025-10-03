@@ -193,7 +193,7 @@ const StudentDocumentManager: React.FC<StudentDocumentManagerProps> = ({
     });
   };
 
-  const completionPercentage = Math.round((stats.total > 0 ? ((Object.keys(DocumentType).length - stats.missingTypes.length) / Object.keys(DocumentType).length) * 100 : 0));
+  const completionPercentage = Math.round((stats.total > 0 ? ((Object.values(DocumentType).length - stats.missingTypes.length) / Object.values(DocumentType).length) * 100 : 0));
 
   if (loading) {
     return (
@@ -239,7 +239,7 @@ const StudentDocumentManager: React.FC<StudentDocumentManagerProps> = ({
               </div>
               <Progress value={completionPercentage} className="w-32" />
               <p className="text-xs text-muted-foreground mt-1">
-                {Object.keys(DocumentType).length - stats.missingTypes.length} / {Object.keys(DocumentType).length} documents
+                {Object.values(DocumentType).length - stats.missingTypes.length} / {Object.values(DocumentType).length} documents
               </p>
             </div>
           </div>

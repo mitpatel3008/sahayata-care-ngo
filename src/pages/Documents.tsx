@@ -138,10 +138,15 @@ const Documents = () => {
     <DashboardLayout user={user}>
       <div className="space-y-6">
         <div>
-          <h1 className="text-4xl font-bold text-foreground">Document Management</h1>
+          <h1 className="text-4xl font-bold text-foreground">General Documents</h1>
           <p className="text-muted-foreground mt-2 text-lg">
-            Upload and manage all required documents for NGO beneficiaries
+            Upload and manage general NGO documents (not student-specific)
           </p>
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              💡 <strong>Tip:</strong> For student-specific documents, use the "Student Documents" section instead.
+            </p>
+          </div>
         </div>
 
         {/* Document Statistics */}

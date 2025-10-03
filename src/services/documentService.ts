@@ -127,7 +127,7 @@ export class DocumentService {
           .eq('beneficiary_id', beneficiary.id);
 
         const documentCount = documents?.length || 0;
-        const totalRequired = Object.keys(DocumentType).length;
+        const totalRequired = Object.values(DocumentType).length;
         const completedDocuments = new Set(documents?.map(doc => doc.type) || []).size;
 
         return {
